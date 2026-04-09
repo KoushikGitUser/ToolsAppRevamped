@@ -1640,7 +1640,7 @@ const ImageToPdf = ({ navigation }) => {
                     styles.filterOption,
                     pageSize === size && styles.filterOptionActive
                   ]}
-                  onPress={() => {
+                  onPress={() => {  
                     setPageSize(size);
                     setPageSizeModalVisible(false);
                     triggerToast('Page Size', `Set to ${size}`, 'info', 2000);
