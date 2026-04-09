@@ -11,4 +11,8 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
+# PdfBox — optional JPEG 2000 classes not shipped (safe to ignore)
+-dontwarn com.gemalto.jp2.JP2Decoder
+-dontwarn com.gemalto.jp2.JP2Encoder
+
 # Add any project specific keep options here:

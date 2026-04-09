@@ -45,6 +45,7 @@ const CameraToText = ({ navigation }) => {
   const [currentWordIndex, setCurrentWordIndex] = useState(-1);
   const [isVoiceLoading,setIsVoiceLoading] = useState(false);
   const [showSpeakInfoModal, setShowSpeakInfoModal] = useState(false);
+  const [liveText, setLiveText] = useState('');
 
   const { colors, isDark } = useTheme();
   const accent = isDark ? ACCENT : ACCENT_LIGHT;
@@ -59,6 +60,37 @@ const CameraToText = ({ navigation }) => {
   const camera = useRef(null);
   const scanIntervalRef = useRef(null);
   const isScanningRef = useRef(false);
+
+  // Live OCR scanning — fast interval snapshots instead of frame processors
+  const isLiveScanningRef = useRef(false);
+
+  const runLiveScan = async () => {
+    if (!isLiveScanningRef.current || !camera.current) return;
+    try {
+      const photo = await camera.current.takePhoto({
+        qualityPrioritization: 'speed',
+        flash: 'off',
+      });
+      let imageUri = photo.path;
+      if (!imageUri.startsWith('file://')) {
+        imageUri = `file://${imageUri}`;
+      }
+      const result = await MlkitOcr.detectFromUri(imageUri);
+      if (result && result.length > 0) {
+        const text = result.map((block) => block.text).join('\n');
+        setLiveText(text);
+      } else {
+        setLiveText('');
+      }
+    } catch (e) {
+      // Silently continue — camera may have been closed mid-scan
+      if (e?.message?.includes('closed')) return;
+    }
+    // Schedule next scan if still active
+    if (isLiveScanningRef.current) {
+      setTimeout(runLiveScan, 400);
+    }
+  };
 
   // Load warning preference on mount
   useEffect(() => {
@@ -209,25 +241,24 @@ const CameraToText = ({ navigation }) => {
     }
     setExtractedText("");
     setSelectedImage("");
+    setLiveText("");
     setIsCameraActive(true);
     setIsScanning(true);
 
-    // Set scanning flags
-    scanIntervalRef.current = true;
-    isScanningRef.current = true;
-
-    // Wait for camera to initialize before starting scan
+    // Start live scanning after camera initializes
+    isLiveScanningRef.current = true;
     setTimeout(() => {
-      console.log("Starting auto-scan interval...");
-      // Start auto-scanning every 1.5 seconds
-      const interval = setInterval(() => {
-        if (!scanIntervalRef.current || !isScanningRef.current) {
-          clearInterval(interval);
-          return;
-        }
-        startAutoScan();
-      }, 1500);
-    }, 1000); // Give camera 1 second to initialize
+      runLiveScan();
+    }, 800);
+  };
+
+  // Called when user taps "Use This Text" on the live bottom sheet
+  const useLiveText = () => {
+    if (liveText.trim()) {
+      setExtractedText(liveText.trim());
+      triggerToast("Success", "Text captured!", "success", 2000);
+    }
+    stopCamera();
   };
 
   const openLiveCamera = () => {
@@ -252,12 +283,12 @@ const CameraToText = ({ navigation }) => {
 
   const stopCamera = () => {
     console.log("Stopping camera...");
-    // Set refs first to stop any ongoing scans
     scanIntervalRef.current = null;
     isScanningRef.current = false;
-    // Then update state
+    isLiveScanningRef.current = false;
     setIsCameraActive(false);
     setIsScanning(false);
+    setLiveText('');
   };
 
   const openCamera = async () => {
@@ -418,16 +449,47 @@ const CameraToText = ({ navigation }) => {
             <Text style={styles.cameraTitle}>Point at text</Text>
           </View>
 
-          {/* Scanning indicator */}
-          {isScanning && (
-            <View style={styles.scanningIndicator}>
-              <ActivityIndicator size="small" color="#fff" />
-              <Text style={styles.scanningText}>Scanning for text...</Text>
-            </View>
-          )}
+          {/* Live scanning indicator */}
+          <View style={styles.scanningIndicator}>
+            <View style={styles.liveDot} />
+            <Text style={styles.scanningText}>Live Detection</Text>
+          </View>
 
           {/* Guide frame */}
           <View style={styles.guideFrame} />
+        </View>
+
+        {/* Live Text Bottom Sheet */}
+        <View style={styles.liveTextSheet}>
+          <View style={styles.liveTextHeader}>
+            <Text style={styles.liveTextTitle}>
+              {liveText ? 'Detected Text' : 'No text detected'}
+            </Text>
+            {liveText ? (
+              <TouchableOpacity
+                onPress={useLiveText}
+                style={styles.useTextBtn}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                <Text style={styles.useTextBtnText}>Use This Text</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {liveText ? (
+            <ScrollView
+              style={styles.liveTextScroll}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+            >
+              <Text style={styles.liveTextContent}>{liveText}</Text>
+            </ScrollView>
+          ) : (
+            <Text style={styles.liveTextPlaceholder}>
+              Point your camera at any text to detect it live
+            </Text>
+          )}
         </View>
       </View>
     );
@@ -460,7 +522,7 @@ const CameraToText = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
       >
         {/* Empty State */}
-        {!extractedText && !selectedImage && (
+        {!extractedText && !selectedImage && !isCameraActive && (
           <View style={styles.emptyState}>
             <Entypo name="camera" size={64} color={colors.emptyIcon} />
             <Text style={styles.emptyTitle}>No text extracted yet</Text>
@@ -489,7 +551,7 @@ const CameraToText = ({ navigation }) => {
         )}
 
         {/* Extracted Text Section */}
-        {selectedImage && (
+        {(selectedImage || extractedText) && (
           <View style={styles.textSection}>
             <Text style={styles.sectionTitle}>Extracted Text</Text>
             <View style={styles.textContainer}>
@@ -1189,7 +1251,7 @@ const createStyles = (colors, accent, isDark) =>
     },
     guideFrame: {
       position: "absolute",
-      top: "30%",
+      top: "25%",
       alignSelf: "center",
       width: "80%",
       height: 200,
@@ -1197,6 +1259,65 @@ const createStyles = (colors, accent, isDark) =>
       borderColor: accent,
       borderRadius: 16,
       backgroundColor: "transparent",
+    },
+    liveDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: "#4CAF50",
+    },
+
+    // Live Text Bottom Sheet (over camera)
+    liveTextSheet: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.85)",
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 20,
+      paddingTop: 18,
+      paddingBottom: 40,
+      maxHeight: "40%",
+    },
+    liveTextHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
+    },
+    liveTextTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: "#fff",
+    },
+    useTextBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: accent,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 50,
+      gap: 6,
+    },
+    useTextBtnText: {
+      color: "#fff",
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    liveTextScroll: {
+      maxHeight: 150,
+    },
+    liveTextContent: {
+      color: "#e0e0e0",
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    liveTextPlaceholder: {
+      color: "#888",
+      fontSize: 14,
+      fontStyle: "italic",
     },
 
     // Modals

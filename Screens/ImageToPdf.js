@@ -33,6 +33,8 @@ import * as Sharing from 'expo-sharing';
 import { saveToDownloads } from '../modules/zip-tools';
 import { lockPdf, imagesToPdfNative } from '../modules/pdf-tools';
 import { useTheme } from '../Services/ThemeContext';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import DragSortGrid from '../Components/DragSortGrid';
 import { ColorMatrix, concatColorMatrices, contrast as contrastMatrix, grayscale, sepia } from 'react-native-color-matrix-image-filters';
 import { captureRef } from 'react-native-view-shot';
 import { BlurView } from '@react-native-community/blur';
@@ -130,6 +132,7 @@ const ImageToPdf = ({ navigation }) => {
   const [isSorting, setIsSorting] = useState(false); // Sorting session state
   const [selectedImageForSort, setSelectedImageForSort] = useState(null); // Image selected to sort
   const [sortPositionModalVisible, setSortPositionModalVisible] = useState(false); // Position modal
+  const [sortInfoModalVisible, setSortInfoModalVisible] = useState(false); // Sort help info modal
   const [applyToAll, setApplyToAll] = useState(false); // Apply edits to all images toggle
   const [editModalToast, setEditModalToast] = useState(null); // Toast for edit modal
   const [isCompressing, setIsCompressing] = useState(false); // Compression progress state
@@ -310,6 +313,12 @@ const ImageToPdf = ({ navigation }) => {
   const doneSorting = () => {
     setIsSorting(false);
     setSelectedImageForSort(null);
+    triggerToast('Sorted', 'Image order updated', 'success', 2000);
+  };
+
+  const handleDragReorder = (reorderedImages) => {
+    setImages(reorderedImages);
+    setPdfUri(null);
   };
 
   const selectImageToSort = (index) => {
@@ -993,6 +1002,82 @@ const ImageToPdf = ({ navigation }) => {
     if (!pdfUri) return;
     setPdfViewerVisible(true);
   };
+
+  // Full-screen sort mode
+  if (isSorting) {
+    return (
+      <GestureHandlerRootView style={styles.container}>
+        {/* Sort Header */}
+        <View style={styles.sortHeader}>
+          <View style={styles.sortHeaderLeft}>
+            <Text style={styles.sortHeading}>Sort Images</Text>
+            <Text style={styles.sortSubheading}>{images.length} images</Text>
+          </View>
+          <View style={styles.sortHeaderRight}>
+            <TouchableOpacity
+              onPress={() => setSortInfoModalVisible(true)}
+              style={styles.sortInfoBtn}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="information-circle-outline" size={26} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={doneSorting}
+              style={styles.sortDoneBtn}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.sortDoneBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Drag Sort Grid */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.sortScrollContent}
+        >
+          <DragSortGrid
+            images={images}
+            onReorderDone={handleDragReorder}
+            borderColor={isDark ? '#555' : '#ccc'}
+            badgeColor={accent}
+            badgeTextColor="#fff"
+          />
+        </ScrollView>
+
+        {/* Sort Info Modal */}
+        <Modal
+          visible={sortInfoModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setSortInfoModalVisible(false)}
+        >
+          <Pressable style={styles.sortInfoModalOverlay} onPress={() => setSortInfoModalVisible(false)}>
+            <BlurView blurType={colors.blurType} blurAmount={10} style={StyleSheet.absoluteFillObject} />
+            <View style={styles.sortInfoModalBox}>
+              <View style={styles.sortInfoModalHeader}>
+                <MaterialIcons name="touch-app" size={28} color={accent} />
+                <Text style={styles.sortInfoModalTitle}>How to Sort</Text>
+              </View>
+              <Text style={styles.sortInfoModalDesc}>
+                Long press and hold on any image to pick it up, then drag it to the desired position.{'\n\n'}
+                Other images will automatically move out of the way as you drag.{'\n\n'}
+                Release the image to drop it in its new position.{'\n\n'}
+                Tap <Text style={{ fontWeight: '800', color: accent }}>Done</Text> when you're finished sorting.
+              </Text>
+              <TouchableOpacity
+                onPress={() => setSortInfoModalVisible(false)}
+                style={styles.sortInfoModalCloseBtn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.sortInfoModalCloseBtnText}>Got it</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Modal>
+      </GestureHandlerRootView>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -2189,6 +2274,97 @@ const createStyles = (colors, accent, isDark) => StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+
+  // Sort Mode Full-Screen
+  sortHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Platform.OS === 'android' ? StatusBar.currentHeight + 16 : 60,
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  sortHeaderLeft: {
+    flex: 1,
+  },
+  sortHeading: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: colors.textPrimary,
+  },
+  sortSubheading: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  sortHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  sortInfoBtn: {
+    padding: 4,
+  },
+  sortDoneBtn: {
+    backgroundColor: accent,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 50,
+  },
+  sortDoneBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  sortScrollContent: {
+    paddingHorizontal: 0,
+    paddingBottom: 100,
+  },
+
+  // Sort Info Modal
+  sortInfoModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sortInfoModalBox: {
+    backgroundColor: colors.card,
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 24,
+    marginHorizontal: 30,
+    width: '85%',
+  },
+  sortInfoModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  sortInfoModalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  sortInfoModalDesc: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 21,
+    marginBottom: 20,
+  },
+  sortInfoModalCloseBtn: {
+    backgroundColor: accent,
+    paddingVertical: 14,
+    borderRadius: 50,
+    alignItems: 'center',
+  },
+  sortInfoModalCloseBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
   buttonDisabled: {
     opacity: 0.4,
   },

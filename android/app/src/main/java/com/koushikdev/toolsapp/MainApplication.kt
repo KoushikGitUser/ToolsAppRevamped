@@ -16,7 +16,17 @@ import com.facebook.react.defaults.DefaultReactNativeHost
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
+import com.mrousavy.camera.frameprocessors.FrameProcessorPluginRegistry
+
 class MainApplication : Application(), ReactApplication {
+
+  companion object {
+    init {
+      FrameProcessorPluginRegistry.addFrameProcessorPlugin("detectText") { proxy, options ->
+        TextRecognitionPlugin(proxy, options)
+      }
+    }
+  }
 
   override val reactNativeHost: ReactNativeHost = ReactNativeHostWrapper(
       this,
