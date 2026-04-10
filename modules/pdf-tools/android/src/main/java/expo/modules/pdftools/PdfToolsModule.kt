@@ -22,6 +22,10 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfDocument
 import android.util.Base64
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
+import com.google.android.gms.tasks.Tasks
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
@@ -547,6 +551,40 @@ class PdfToolsModule : Module() {
         } catch (e: Exception) {
           try { doc?.close() } catch (_: Exception) {}
           promise.reject("ERR_IMAGES_TO_PDF", "Failed to create PDF: ${e.message}", e)
+        }
+      }.start()
+    }
+
+    // scanQRFromImage(imagePath) -> { text, format, type }
+    // Uses ML Kit Barcode Scanner to detect QR/barcodes from a static image.
+    AsyncFunction("scanQRFromImage") { imagePath: String, promise: Promise ->
+      Thread {
+        try {
+          val context = appContext.reactContext ?: throw Exception("No context")
+          val uri = Uri.parse(imagePath)
+          val inputImage = if (uri.scheme == "content") {
+            InputImage.fromFilePath(context, uri)
+          } else {
+            val file = File(resolveFilePath(imagePath))
+            if (!file.exists()) throw Exception("File not found")
+            InputImage.fromFilePath(context, Uri.fromFile(file))
+          }
+
+          val scanner = BarcodeScanning.getClient()
+          val barcodes = Tasks.await(scanner.process(inputImage))
+
+          if (barcodes.isNotEmpty()) {
+            val barcode = barcodes[0]
+            promise.resolve(mapOf(
+              "text" to (barcode.rawValue ?: ""),
+              "format" to barcode.format,
+              "type" to barcode.valueType
+            ))
+          } else {
+            promise.reject("ERR_NO_QR", "No QR code or barcode found in the image", null)
+          }
+        } catch (e: Exception) {
+          promise.reject("ERR_SCAN_QR", "Failed to scan QR from image: ${e.message}", e)
         }
       }.start()
     }

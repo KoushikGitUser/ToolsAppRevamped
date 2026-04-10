@@ -29,8 +29,8 @@ import {
 } from '../modules/speech-recognition';
 import { triggerToast } from '../Services/toast';
 
-const ACCENT = '#00f2ff';
-const ACCENT_LIGHT = '#33f4ff';
+const ACCENT = '#ffffff';
+const ACCENT_LIGHT = '#000000';
 
 const TextToSpeech = ({ navigation }) => {
   const { colors, isDark } = useTheme();
@@ -65,7 +65,8 @@ const TextToSpeech = ({ navigation }) => {
       setModalText(newText);
       baseTextRef.current = newText;
       partialTextRef.current = '';
-      setIsRecording(false);
+      // Don't set isRecording(false) here — the native module auto-restarts
+      // in continuous mode. Only stopListening() should toggle the UI state.
     });
 
     const partialSub = addPartialResultListener(({ text }) => {
@@ -266,12 +267,12 @@ const TextToSpeech = ({ navigation }) => {
               disabled={isVoiceLoading}
             >
               {isVoiceLoading ? (
-                <ActivityIndicator size={20} color={isDark ? accent : '#fff'} />
+                <ActivityIndicator size={20} color={isDark ? "black" : '#fff'} />
               ) : (
                 <Ionicons
                   name={isSpeaking ? "stop-circle" : "volume-high"}
                   size={20}
-                  color={isDark ? accent : '#fff'}
+                  color={isDark ? "black" : '#fff'}
                 />
               )}
               <Text style={styles.speakButtonText}>
@@ -309,7 +310,7 @@ const TextToSpeech = ({ navigation }) => {
             onPress={openTextInput}
             activeOpacity={0.8}
           >
-            <FontAwesome6 name="volume-high" size={18} color="white" />
+            <FontAwesome6 name="volume-high" size={18} color={isDark?"black":"white"} />
             <Text style={styles.enterTextBtnText}>Enter Text to Speak</Text>
           </TouchableOpacity>
         )}
@@ -349,7 +350,7 @@ const TextToSpeech = ({ navigation }) => {
                 onPress={toggleRecording}
                 activeOpacity={0.8}
               >
-                <Ionicons name="mic" size={18} color="#fff" />
+                <Ionicons name="mic" size={18} color={isDark?"black":"white"}  />
                 <Text style={styles.voiceBtnText}>Start Voice Prompt</Text>
               </TouchableOpacity>
             ) : (
@@ -553,9 +554,9 @@ const createStyles = (colors, accent, isDark) => StyleSheet.create({
     marginTop: 20,
   },
   enterTextBtnText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#fff',
+    color: isDark?"black" :'#fff',
   },
 
   // Full-Screen Editor
@@ -585,7 +586,7 @@ const createStyles = (colors, accent, isDark) => StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 8,
   },
-  editorDoneBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  editorDoneBtnText: { color: isDark?"black" :'#fff', fontWeight: '700', fontSize: 16 },
   editorCounterText: {
     fontSize: 12,
     color: colors.textMuted,
@@ -617,7 +618,7 @@ const createStyles = (colors, accent, isDark) => StyleSheet.create({
     paddingVertical: 12,
     gap: 8,
   },
-  voiceBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  voiceBtnText: { color: isDark?"black" :'#fff', fontSize: 16, fontWeight: '800' },
   editorVoiceActiveRow: {
     flexDirection: 'row',
     gap: 10,
@@ -714,9 +715,9 @@ const createStyles = (colors, accent, isDark) => StyleSheet.create({
     marginBottom: 12,
   },
   speakButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: isDark ? accent : '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+    color: isDark ? "black" : '#fff',
   },
   speakInfoButton: {
     width: '20%',

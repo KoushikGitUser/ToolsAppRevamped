@@ -15,6 +15,7 @@ import {
   MaterialCommunityIcons,
   AntDesign,
   FontAwesome5,
+  SimpleLineIcons,
 } from '@expo/vector-icons';
 import { useTheme } from '../Services/ThemeContext';
 
@@ -107,14 +108,10 @@ const AudioTools = ({ navigation }) => {
                 {card.iconComponent(card.accent)}
               </View>
               <View style={styles.cardTextContainer}>
-                <Text style={styles.cardTitle}>{card.title}</Text>
+                <Text style={[styles.cardTitle, { color: card.accent }]}>{card.title}</Text>
               </View>
               {card.badge && <MaterialCommunityIcons name="crown-circle" size={30} color="orange" style={{ position: 'absolute', top: -8, right: -0 }} />}
-              <MaterialIcons
-                name="keyboard-arrow-right"
-                size={28}
-                color={isDark ? 'white' : 'black'}
-              />
+               <SimpleLineIcons style={{marginRight:8}} name="arrow-right" size={17} color={card.accent} />
             </View>
           </TouchableOpacity>
         ))}
@@ -165,7 +162,7 @@ const createStyles = (colors, isDark) =>
       gap: 8,
     },
     cardTextContainer: { flex: 1 },
-    cardTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary },
+    cardTitle: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
   });
 
 export default AudioTools;

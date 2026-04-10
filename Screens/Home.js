@@ -19,6 +19,7 @@ import {
   Entypo,
   Feather,
   FontAwesome,
+  SimpleLineIcons,
 } from "@expo/vector-icons";
 import { BlurView } from "@react-native-community/blur";
 import { useTheme } from "../Services/ThemeContext";
@@ -112,7 +113,7 @@ const CARDS = [
         <FontAwesome6 name="volume-high" size={24} color={color} />
       </>
     ),
-    accent: "#00f2ff",
+    accent: "#7d7d7d",
     screen: "TextToSpeech",
   },
   {
@@ -193,7 +194,7 @@ const Home = ({ navigation }) => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.heading}>Tools</Text>
+        <Text style={styles.heading}>ToolBox</Text>
         <View style={styles.headerRight}>
           <TouchableOpacity
             onPress={() => setThemeSelectorVisible(true)}
@@ -251,11 +252,7 @@ const Home = ({ navigation }) => {
                 </View>
                 <View style={styles.gridCardFooter}>
                   <Text style={[styles.gridCardTitle, { color: card.accent }]} numberOfLines={1}>{card.title}</Text>
-                  <MaterialIcons
-                    name="keyboard-arrow-right"
-                    size={24}
-                    color={card.accent}
-                  />
+                  <SimpleLineIcons style={{marginRight:0}} name="arrow-right" size={15}  color={card.accent} />
                 </View>
                 {card.badge && (
                   <MaterialCommunityIcons
@@ -297,11 +294,8 @@ const Home = ({ navigation }) => {
               </View>
               <Text style={[styles.cardTitle, { flex: 1 }]}>{card.title}</Text>
               {card.badge && <MaterialCommunityIcons name="crown-circle" size={30} color="orange" style={{ position: 'absolute', top: -8, right: -0 }} />}
-              <MaterialIcons
-                name="keyboard-arrow-right"
-                size={28}
-                color={isDark ? "white" : "black"}
-              />
+              <SimpleLineIcons style={{marginRight:8}} name="arrow-right" size={17} color={isDark ? "white" : "black"} />
+
             </View>
           </TouchableOpacity>
         ))}
@@ -495,7 +489,7 @@ const createStyles = (colors, isDark) =>
       marginBottom: 14,
     },
     gridCard: {
-      borderRadius: 38,
+      borderRadius: 35,
       padding: 8,
       paddingBottom:20,
       borderWidth: 1,
@@ -504,7 +498,7 @@ const createStyles = (colors, isDark) =>
     gridIconContainer: {
       width: 60,
       height: 60,
-      borderRadius: 20,
+      borderRadius: 50,
       alignItems: "center",
       justifyContent: "center",
       marginBottom: 14,
@@ -515,7 +509,7 @@ const createStyles = (colors, isDark) =>
       flexDirection: "row",
       justifyContent:"space-between",
       paddingHorizontal:25,
-      borderRadius: 52,
+      borderRadius: 55,
     },
     gridCardFooter: {
       flexDirection: "row",
@@ -534,21 +528,22 @@ const createStyles = (colors, isDark) =>
       flexDirection: "row",
       alignItems: "center",
       width: "100%",
-      borderRadius: 56,
+      borderRadius: 58,
       padding: 10,
+      paddingVertical:12,
       marginBottom: 14,
       borderWidth: 1,
     },
     iconContainer: {
       width: 50,
       height: 50,
-      borderRadius: 54,
+      borderRadius: 50,
       alignItems: "center",
       justifyContent: "center",
       marginRight: 16,
     },
     iconContainerWide: {
-      width: 110,
+      width: 120,
       flexDirection: "row",
       gap: 8,
     },

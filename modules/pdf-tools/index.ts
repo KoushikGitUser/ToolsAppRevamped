@@ -58,6 +58,10 @@ export async function imagesToPdfNative(
   );
 }
 
+export async function scanQRFromImage(imagePath: string) {
+  return await PdfToolsModule.scanQRFromImage(imagePath);
+}
+
 export async function annotatePdf(
   inputPath: string,
   outputPath: string,

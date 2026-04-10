@@ -64,6 +64,7 @@ declare class PdfToolsModule extends NativeModule {
     marginPoints: number,
     outputPath: string
   ): Promise<CreatePdfResult>;
+  scanQRFromImage(imagePath: string): Promise<{ text: string; format: number; type: number }>;
   annotatePdf(inputPath: string, outputPath: string, annotationsJson: string, deletedPages: number[], rotationsJson: string): Promise<CreatePdfResult>;
 }
 

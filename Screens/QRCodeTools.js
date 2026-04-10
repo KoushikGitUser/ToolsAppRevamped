@@ -17,9 +17,10 @@ import {
   Keyboard,
   ActivityIndicator,
   Alert,
+  Pressable,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { FontAwesome, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from '@react-native-community/blur';
 import { useTheme } from '../Services/ThemeContext';
 import QRCode from 'react-native-qrcode-svg';
@@ -27,6 +28,7 @@ import { Camera, CameraType } from 'react-native-camera-kit';
 import * as Clipboard from 'expo-clipboard';
 import * as Speech from 'expo-speech';
 import { triggerToast } from '../Services/toast';
+import { scanQRFromImage } from '../modules/pdf-tools';
 import Toaster from "../Components/UniversalToaster/Toaster";
 
 const ACCENT = '#6B8E23';
@@ -48,6 +50,7 @@ const QRCodeTools = ({ navigation }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [currentWordIndex, setCurrentWordIndex] = useState(-1);
+  const [showScanChoiceModal, setShowScanChoiceModal] = useState(false);
 
   const cameraRef = useRef(null);
 
@@ -69,13 +72,15 @@ const QRCodeTools = ({ navigation }) => {
   const getQRSize = (text) => {
     const charCount = text.length;
     const screenWidth = Dimensions.get('window').width;
+    // Max size = screen width minus container padding (40) and quiet zone (20)
+    const maxSize = screenWidth - 100;
 
     if (charCount <= 20) {
-      return 200; // Current size
+      return Math.min(200, maxSize);
     } else if (charCount <= 40) {
-      return screenWidth * 0.7; // 70% of screen width
+      return Math.min(screenWidth * 0.60, maxSize);
     } else {
-      return screenWidth * 0.8; // 90% of screen width
+      return maxSize;
     }
   };
 
@@ -127,6 +132,56 @@ const openScanner = async () => {
   }
 };
 
+  const scanFromImage = async () => {
+    try {
+      // Check current permission
+      const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
+
+      if (status !== 'granted') {
+        // Request permission
+        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (permissionResult.status !== 'granted') {
+          Alert.alert(
+            "Gallery Permission Required",
+            "Please enable gallery permission in settings to scan QR from images.",
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Open Settings", onPress: () => Linking.openSettings() }
+            ]
+          );
+          return;
+        }
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: false,
+        quality: 1,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const imageUri = result.assets[0].uri;
+      try {
+        const qrResult = await scanQRFromImage(imageUri);
+        if (qrResult?.text) {
+          setScannedData(qrResult.text);
+          setShowResultModal(true);
+        }
+      } catch (e) {
+        if (e?.code === 'ERR_NO_QR') {
+          triggerToast('No QR Found', 'No QR code or barcode detected in this image', 'alert', 3000);
+        } else {
+          triggerToast('Error', 'Failed to scan image for QR code', 'error', 3000);
+        }
+      }
+    } catch (error) {
+      console.log('Scan from image error:', error);
+      triggerToast('Error', 'Failed to pick image', 'error', 2000);
+    }
+  };
+
   const handleBarcodeScan = (event) => { 
     if (event.nativeEvent.codeStringValue) {
       setScannedData(event.nativeEvent.codeStringValue);
@@ -138,6 +193,46 @@ const openScanner = async () => {
   const isURL = (text) => {
     const urlPattern = /^(https?:\/\/)|(www\.)/i;
     return urlPattern.test(text);
+  };
+
+  const isUPI = (text) => {
+    return text?.toLowerCase().startsWith('upi://');
+  };
+
+  const parseUPI = (upiUri) => {
+    try {
+      const queryString = upiUri.split('?')[1];
+      if (!queryString) return null;
+      const params = {};
+      queryString.split('&').forEach((pair) => {
+        const [key, value] = pair.split('=');
+        if (key && value) {
+          params[decodeURIComponent(key)] = decodeURIComponent(value);
+        }
+      });
+      return {
+        payeeId: params.pa || '',
+        payeeName: params.pn || '',
+        amount: params.am || '',
+        currency: params.cu || 'INR',
+        note: params.tn || '',
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const openUPI = async () => {
+    try {
+      const supported = await Linking.canOpenURL(scannedData);
+      if (supported) {
+        await Linking.openURL(scannedData);
+      } else {
+        triggerToast('No UPI App', 'No UPI payment app found on this device', 'alert', 3000);
+      }
+    } catch {
+      triggerToast('Error', 'Could not open UPI app', 'error', 2000);
+    }
   };
 
   const openURL = async () => {
@@ -250,12 +345,68 @@ const openScanner = async () => {
         <TouchableOpacity
           style={styles.scanButton}
           activeOpacity={0.8}
-          onPress={openScanner}
+          onPress={() => setShowScanChoiceModal(true)}
         >
           <MaterialCommunityIcons name="qrcode-scan" size={22} color={colors.textPrimary} />
           <Text style={styles.scanButtonText}>Scan QR Code</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Scan Choice Modal */}
+      <Modal
+        visible={showScanChoiceModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowScanChoiceModal(false)}
+      >
+        <Pressable style={styles.scanChoiceOverlay} onPress={() => setShowScanChoiceModal(false)}>
+          <BlurView blurType={colors.blurType} blurAmount={10} style={StyleSheet.absoluteFillObject} />
+          <View style={styles.scanChoiceBox}>
+            <Text style={styles.scanChoiceTitle}>Scan QR Code</Text>
+            <Text style={styles.scanChoiceDesc}>Choose how you want to scan</Text>
+
+            <TouchableOpacity
+              style={styles.scanChoiceBtn}
+              activeOpacity={0.8}
+              onPress={() => {
+                setShowScanChoiceModal(false);
+                openScanner();
+              }}
+            >
+              <Ionicons name="camera" size={24} color={accent} />
+              <View style={styles.scanChoiceBtnText}>
+                <Text style={styles.scanChoiceBtnTitle}>Camera</Text>
+                <Text style={styles.scanChoiceBtnDesc}>Scan QR code using camera</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.scanChoiceBtn}
+              activeOpacity={0.8}
+              onPress={() => {
+                setShowScanChoiceModal(false);
+                scanFromImage();
+              }}
+            >
+              <Ionicons name="image" size={24} color={accent} />
+              <View style={styles.scanChoiceBtnText}>
+                <Text style={styles.scanChoiceBtnTitle}>Image from Gallery</Text>
+                <Text style={styles.scanChoiceBtnDesc}>Detect QR code from an image</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.scanChoiceCancelBtn}
+              onPress={() => setShowScanChoiceModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.scanChoiceCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
 
       {/* Input Modal for Generate */}
       <Modal
@@ -416,33 +567,84 @@ const openScanner = async () => {
         <View style={styles.modalOverlay}>
           <BlurView blurType={colors.blurType} blurAmount={10} style={StyleSheet.absoluteFillObject} />
           <View style={styles.resultModalBox}>
-            <Text style={styles.resultModalTitle}>Scanned Result</Text>
+            <Text style={styles.resultModalTitle}>
+              {isUPI(scannedData) ? 'UPI QR Detected' : 'Scanned Result'}
+            </Text>
 
-            <View style={styles.resultTextWrapper}>
-              <ScrollView
-                style={styles.resultTextScroll}
-                showsVerticalScrollIndicator={false}
-                nestedScrollEnabled={true}
-              >
-                {isURL(scannedData) ? (
-                  <Text style={styles.resultText} selectable>{scannedData}</Text>
-                ) : (
-                  <View style={styles.wordsContainer}>
-                    {scannedData.split(/\s+/).filter(word => word.trim().length > 0).map((word, index) => (
-                      <TouchableOpacity
-                        key={index}
-                        onPress={() => speakFromWord(index)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.resultText}>
-                          {word}{' '}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+            {/* UPI Payment Details */}
+            {isUPI(scannedData) && (() => {
+              const upi = parseUPI(scannedData);
+              if (!upi) return null;
+              return (
+                <View style={styles.upiCard}>
+                  <View style={styles.upiIconRow}>
+                    <FontAwesome name="bank" size={32} color={accent} />
                   </View>
-                )}
-              </ScrollView>
-            </View>
+                  {upi.payeeName ? (
+                    <View style={styles.upiRow}>
+                      <Text style={styles.upiLabel}>Pay to</Text>
+                      <Text style={styles.upiValue}>{upi.payeeName}</Text>
+                    </View>
+                  ) : null}
+                  {upi.payeeId ? (
+                    <View style={styles.upiRow}>
+                      <Text style={styles.upiLabel}>UPI ID</Text>
+                      <Text style={styles.upiValue}>{upi.payeeId}</Text>
+                    </View>
+                  ) : null}
+                  {upi.amount ? (
+                    <View style={styles.upiRow}>
+                      <Text style={styles.upiLabel}>Amount</Text>
+                      <Text style={[styles.upiValue, styles.upiAmount]}>₹{upi.amount}</Text>
+                    </View>
+                  ) : null}
+                  {upi.note ? (
+                    <View style={styles.upiRow}>
+                      <Text style={styles.upiLabel}>Note</Text>
+                      <Text style={styles.upiValue}>{upi.note}</Text>
+                    </View>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={styles.upiPayBtn}
+                    onPress={openUPI}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons name="currency-rupee" size={24} color="white" />
+                    <Text style={styles.upiPayBtnText}>Pay Now</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
+
+            {/* Normal text / URL result */}
+            {!isUPI(scannedData) && (
+              <View style={styles.resultTextWrapper}>
+                <ScrollView
+                  style={styles.resultTextScroll}
+                  showsVerticalScrollIndicator={false}
+                  nestedScrollEnabled={true}
+                >
+                  {isURL(scannedData) ? (
+                    <Text style={styles.resultText} selectable>{scannedData}</Text>
+                  ) : (
+                    <View style={styles.wordsContainer}>
+                      {scannedData.split(/\s+/).filter(word => word.trim().length > 0).map((word, index) => (
+                        <TouchableOpacity
+                          key={index}
+                          onPress={() => speakFromWord(index)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.resultText}>
+                            {word}{' '}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            )}
 
             <View style={styles.resultButtons}>
               <TouchableOpacity
@@ -454,7 +656,7 @@ const openScanner = async () => {
                 <Text style={styles.copyButtonText}>Copy</Text>
               </TouchableOpacity>
 
-              {!isURL(scannedData) && (
+              {!isURL(scannedData) && !isUPI(scannedData) && (
                 <TouchableOpacity
                   onPress={speakText}
                   style={styles.speakButton}
@@ -674,12 +876,13 @@ const createStyles = (colors, accent, isDark) => StyleSheet.create({
     marginBottom: 24,
   },
   qrContainer: {
-    padding: 20,
+    padding: 10,
     backgroundColor: '#ffffff',
     borderRadius: 40,
     marginBottom: 70,
     borderWidth: 10,
     borderColor: accent,
+    maxWidth: Dimensions.get('window').width - 50,
   },
   loaderContainer: {
     paddingVertical: 60,
@@ -861,6 +1064,121 @@ const createStyles = (colors, accent, isDark) => StyleSheet.create({
   openUrlButtonText: {
     fontSize: 16,
     fontWeight: '700',
+    color: '#fff',
+  },
+  // Scan Choice Modal
+  scanChoiceOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scanChoiceBox: {
+    backgroundColor: colors.card,
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 20,
+    width: '85%',
+  },
+  scanChoiceTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    textAlign: 'center',
+  },
+  scanChoiceDesc: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 20,
+  },
+  scanChoiceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
+    gap: 14,
+  },
+  scanChoiceBtnText: {
+    flex: 1,
+  },
+  scanChoiceBtnTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  scanChoiceBtnDesc: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  scanChoiceCancelBtn: {
+    paddingVertical: 14,
+    borderRadius: 50,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  scanChoiceCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+
+  // UPI Payment Card
+  upiCard: {
+    backgroundColor: isDark ? '#1a2a1a' : '#f0fdf0',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: isDark ? '#2d4a2d' : '#c8e6c9',
+    padding: 20,
+    marginBottom: 16,
+  },
+  upiIconRow: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  upiRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: isDark ? '#2a3a2a' : '#e8f5e9',
+  },
+  upiLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  upiValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 16,
+  },
+  upiAmount: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#4CAF50',
+  },
+  upiPayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4CAF50',
+    borderRadius: 50,
+    paddingVertical: 16,
+    marginTop: 20,
+    gap: 3,
+  },
+  upiPayBtnText: {
+    fontSize: 17,
+    fontWeight: '800',
     color: '#fff',
   },
   doneButton: {
